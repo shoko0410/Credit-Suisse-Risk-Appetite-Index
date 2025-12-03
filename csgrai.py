@@ -1,41 +1,65 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
 from datetime import datetime
+from typing import List, Dict, Optional, Union
 
 # ==============================================================================
-# 1. 자산 유니버스 정의 (Data Universe)
+# 0. 설정 및 상수 (Configuration & Constants)
 # ==============================================================================
+RET_WINDOW = 126  # 6개월 (Official CS Whitepaper)
+VOL_WINDOW = 252  # 12개월 (Official CS Whitepaper)
+MIN_ASSETS = 15
+THRESHOLD = 2.0   # 이벤트 분석 임계값
+
+# 자산 유니버스 정의 (Data Universe)
 # 선진국 주식
-dm_equities = [
+DM_EQUITIES = [
     'SPY', 'QQQ', 'IWM', 'EWJ', 'EWG', 'EWU', 'EWQ', 
     'EWL', 'EWC', 'EWA', 'EWD', 'EWH', 'EWS'
 ]
 # 선진국 채권
-dm_bonds = ['SHY', 'IEF', 'TLT', 'BWX', 'IGOV']
+DM_BONDS = ['SHY', 'IEF', 'TLT', 'BWX', 'IGOV']
 # 신흥국 주식
-em_equities = ['EEM', 'FXI', 'EWY', 'EWT', 'INDA', 'EWZ', 'EWW', 'EZA', 'TUR']
+EM_EQUITIES = ['EEM', 'FXI', 'EWY', 'EWT', 'INDA', 'EWZ', 'EWW', 'EZA', 'TUR']
 # 신흥국 채권
-em_bonds = ['EMB', 'EMLC']
+EM_BONDS = ['EMB', 'EMLC']
 # 원자재 및 리츠
-commodities = ['GLD', 'SLV', 'USO', 'CPER', 'DBC', 'VNQ']
+COMMODITIES = ['GLD', 'SLV', 'USO', 'CPER', 'DBC', 'VNQ']
 # 벤치마크 (S&P 500)
-benchmark = ['^GSPC']
+BENCHMARK = ['^GSPC']
 
-tickers = dm_equities + dm_bonds + em_equities + em_bonds + commodities + benchmark
-unique_tickers = list(set(tickers))
-
-print(f"총 {len(unique_tickers)}개의 자산으로 인덱스를 구성합니다.")
+RISK_FREE = ['^IRX'] # 13 Week Treasury Bill
+TICKERS = DM_EQUITIES + DM_BONDS + EM_EQUITIES + EM_BONDS + COMMODITIES + BENCHMARK + RISK_FREE
+UNIQUE_TICKERS = list(set(TICKERS))
 
 # ==============================================================================
-# 2. 데이터 수집 함수 (수정됨: auto_adjust=False)
+# 1. 데이터 수집 함수
 # ==============================================================================
-def fetch_data(ticker_list, start_date="2010-01-01"):
+def clean_outliers(df: pd.DataFrame, threshold: float = 0.5) -> pd.DataFrame:
+    """일간 수익률이 threshold(50%)를 초과하는 이상치 제거 (Data Cleaning)"""
+    # 수익률 계산
+    returns = df.pct_change()
+    
+    # 이상치 마스크 생성 (절대값 50% 이상 변동)
+    mask = returns.abs() > threshold
+    outlier_count = mask.sum().sum()
+    
+    if outlier_count > 0:
+        print(f"데이터 정제: 총 {outlier_count}개의 이상치(>50% 변동)를 감지하여 제거합니다.")
+        # 이상치를 NaN으로 처리하고 이전 값으로 채움
+        df_clean = df.copy()
+        df_clean[mask] = np.nan
+        df_clean = df_clean.ffill()
+        return df_clean
+    
+    return df
+
+def fetch_data(ticker_list: List[str], start_date: str = "2010-01-01") -> pd.DataFrame:
     print("데이터 다운로드 중... (약 1분 정도 소요될 수 있습니다)")
     try:
-        # 수정사항: auto_adjust=False 옵션 추가 (Adj Close 확보용)
+        # auto_adjust=False 옵션 추가 (Adj Close 확보용)
         df = yf.download(ticker_list, start=start_date, progress=False, auto_adjust=False)
         
         if 'Adj Close' in df.columns:
@@ -54,25 +78,40 @@ def fetch_data(ticker_list, start_date="2010-01-01"):
     if data.empty:
         return pd.DataFrame()
 
-    # 데이터 품질 관리
-    threshold = int(data.shape[0] * 0.6)
-    data = data.dropna(axis=1, thresh=threshold) # 데이터 부족한 자산 제외
-    data = data.ffill() # 결측치 채우기
-    data = data.dropna(axis=0, how='any') # 앞부분 NaN 제거
+    # 1. 이상치 제거 (Outlier Cleaning)
+    data = clean_outliers(data)
+
+    # 2. 데이터 품질 관리
+    # 수정: 생존 편향 제거를 위해 dropna(axis=1) 및 dropna(axis=0, how='any') 삭제
+    # 모든 자산이 NaN인 날짜만 제거
+    data = data.dropna(axis=0, how='all') 
+    data = data.ffill() # 결측치 채우기 (중간 결측 방지)
     
-    print(f"데이터 수집 완료: {data.shape[1]}개 자산, {data.shape[0]}일 데이터")
+    # 벤치마크(^GSPC)가 있는 날짜부터 시작하도록 조정 (선택사항이나 그래프 매칭 위해 권장)
+    if '^GSPC' in data.columns:
+        first_valid_idx = data['^GSPC'].first_valid_index()
+        if first_valid_idx is not None:
+            data = data.loc[first_valid_idx:]
+    
+    print(f"데이터 수집 완료: {data.shape[1]}개 자산, {data.shape[0]}일 데이터 (Dynamic Universe 적용)")
     return data
 
 # ==============================================================================
-# 3. CS GRAI 계산 엔진
+# 2. CS GRAI 계산 엔진
 # ==============================================================================
-def calculate_cs_grai(price_data):
-    RET_WINDOW = 126  # 6개월
-    VOL_WINDOW = 252  # 12개월
-    MIN_ASSETS = 15
-    
+def calculate_cs_grai(price_data: pd.DataFrame) -> pd.Series:
     grai_results = {}
-    valid_assets = [t for t in price_data.columns if t != '^GSPC']
+    
+    # 자산군과 무위험자산 분리
+    rf_ticker = '^IRX'
+    if rf_ticker not in price_data.columns:
+        print("경고: 무위험자산(^IRX) 데이터가 없습니다. 무위험 수익률을 0으로 가정합니다.")
+        rf_series = pd.Series(0, index=price_data.index)
+    else:
+        # ^IRX는 연율(%)로 제공되므로 일간 수익률로 변환 필요 (근사치: 연율/252)
+        rf_series = price_data[rf_ticker] / 100 / 252
+        
+    valid_assets = [t for t in price_data.columns if t != '^GSPC' and t != rf_ticker]
     
     start_idx = max(RET_WINDOW, VOL_WINDOW)
     total_days = len(price_data)
@@ -88,101 +127,57 @@ def calculate_cs_grai(price_data):
         p_current = price_data[valid_assets].iloc[i]
         p_past = price_data[valid_assets].iloc[i-RET_WINDOW]
         
-        # Risk (변동성) & Return (수익률) 계산
+        # Risk (변동성) 계산
         log_rets = np.log(subset_vol / subset_vol.shift(1))
         volatility = log_rets.std() * np.sqrt(252)
-        returns = (p_current / p_past) - 1
         
-        daily_df = pd.DataFrame({'Risk': volatility, 'Return': returns}).dropna()
+        # Return (초과 수익률) 계산: (수익률 - 무위험수익률)
+        # 기간 수익률 (Simple Return)
+        raw_returns = (p_current / p_past) - 1
+        
+        # 해당 기간 동안의 무위험 수익률 합계 (단리 근사)
+        period_rf = rf_series.iloc[i-RET_WINDOW : i].sum()
+        
+        excess_returns = raw_returns - period_rf
+        
+        daily_df = pd.DataFrame({'Risk': volatility, 'Return': excess_returns}).dropna()
         
         if len(daily_df) < MIN_ASSETS:
             grai_results[current_date] = np.nan
             continue
             
-        # 회귀분석
-        X = daily_df['Risk'].values.reshape(-1, 1)
+        # 회귀분석 (Numpy Optimization)
+        # 수정: 변동성 표준화 (High-Beta Bias 제거)
+        # Risk와 Return을 각각 Z-Score로 정규화하여 회귀분석 수행
+        # 이렇게 하면 기울기(Slope)는 상관계수(Correlation)와 같아짐 (-1 ~ 1 사이 값)
+        
+        x = daily_df['Risk'].values
         y = daily_df['Return'].values
         
-        model = LinearRegression()
-        model.fit(X, y)
-        grai_results[current_date] = model.coef_[0]
+        # Z-Score Normalization
+        if np.std(x) == 0 or np.std(y) == 0:
+            grai_results[current_date] = 0
+            continue
+            
+        x_norm = (x - np.mean(x)) / np.std(x)
+        y_norm = (y - np.mean(y)) / np.std(y)
+        
+        # np.cov는 공분산 행렬을 반환: [[Var(x), Cov(x,y)], [Cov(y,x), Var(y)]]
+        # 정규화된 데이터의 분산은 1이므로, Cov(x_norm, y_norm) 자체가 기울기이자 상관계수임
+        cov_matrix = np.cov(x_norm, y_norm)
+        slope = cov_matrix[0, 1] # / 1.0
+        
+        grai_results[current_date] = slope
         
         if i % 1000 == 0:
-            print(f"Processing: {current_date.date()}")
+            print(f"Processing: {current_date.date()} | Assets: {len(daily_df)}")
 
     return pd.Series(grai_results)
 
 # ==============================================================================
-# 4. 실행 및 시각화 (Main Execution)
+# 3. 심화 백테스팅: 이벤트(Episode)별 진입/극점/회복 수익률 분석
 # ==============================================================================
-# 1. 실행 (여기서 fetch_data를 호출합니다)
-raw_data = fetch_data(unique_tickers, start_date="2010-01-01")
-
-if not raw_data.empty:
-    # 2. 계산
-    cs_grai_raw = calculate_cs_grai(raw_data)
-
-    # 3. 정규화 (Z-Score)
-    rolling_window = 252 * 3
-    grai_mean = cs_grai_raw.rolling(window=rolling_window, min_periods=252).mean()
-    grai_std = cs_grai_raw.rolling(window=rolling_window, min_periods=252).std()
-    
-    cs_grai_z = (cs_grai_raw - grai_mean) / grai_std
-    cs_grai_smooth = cs_grai_z.rolling(window=5).mean() # 스무딩
-
-    # 4. 그리기
-    fig, ax1 = plt.subplots(figsize=(15, 8))
-    plt.style.use('bmh')
-
-    # 메인 차트
-    line1 = ax1.plot(cs_grai_smooth.index, cs_grai_smooth, label='Global Risk Appetite (Proxy)', color='#1f77b4', linewidth=1.5)
-    
-    # 기준선
-    ax1.axhline(y=2.0, color='r', linestyle='--', alpha=0.6)
-    ax1.axhline(y=-2.0, color='g', linestyle='--', alpha=0.6)
-    ax1.axhline(y=0, color='black', linewidth=1, alpha=0.5)
-    
-    ax1.fill_between(cs_grai_smooth.index, 2.0, cs_grai_smooth, where=(cs_grai_smooth >= 2.0), facecolor='red', alpha=0.3)
-    ax1.fill_between(cs_grai_smooth.index, -2.0, cs_grai_smooth, where=(cs_grai_smooth <= -2.0), facecolor='green', alpha=0.3)
-
-    # 현재값 표시
-    if not cs_grai_smooth.empty and not np.isnan(cs_grai_smooth.iloc[-1]):
-        last_date = cs_grai_smooth.index[-1]
-        last_val = cs_grai_smooth.iloc[-1]
-        ax1.plot(last_date, last_val, marker='o', color='red', markersize=8)
-        ax1.annotate(f'{last_val:.2f}', xy=(last_date, last_val), xytext=(10, 5), 
-                     textcoords='offset points', color='red', fontweight='bold', fontsize=12)
-
-    ax1.set_ylabel('Risk Appetite (Z-Score)', fontsize=12, color='#1f77b4')
-    ax1.set_title('Credit Suisse Global Risk Appetite Index (CS GRAI)', fontsize=18, fontweight='bold', pad=20)
-    ax1.grid(True, alpha=0.3)
-
-    # 보조 차트 (S&P 500)
-    if '^GSPC' in raw_data.columns:
-        ax2 = ax1.twinx()
-        sp500 = raw_data['^GSPC'].loc[cs_grai_smooth.index[0]:]
-        line2 = ax2.plot(sp500.index, sp500, color='gray', alpha=0.4, linewidth=1, label='S&P 500')
-        ax2.set_ylabel('S&P 500 Level', color='gray')
-        ax2.grid(False)
-        
-        # 범례 통합
-        lines = line1 + line2
-        labels = [l.get_label() for l in lines]
-        ax1.legend(lines, labels, loc='upper left', frameon=True, facecolor='white', framealpha=0.9)
-
-    plt.tight_layout()
-    plt.show()
-
-    # 결과 텍스트
-    print(f"\n현재 CS GRAI 지수: {cs_grai_smooth.iloc[-1]:.2f}")
-
-else:
-    print("데이터 다운로드에 실패했습니다.")
-
-# ==============================================================================
-# 5. 심화 백테스팅: 이벤트(Episode)별 진입/극점/회복 수익률 분석
-# ==============================================================================
-def get_forward_returns(date, price_series, periods):
+def get_forward_returns(date: datetime, price_series: pd.Series, periods: Dict[str, int]) -> Dict[str, float]:
     """특정 날짜 기준 미래 수익률 계산"""
     returns = {}
     try:
@@ -202,7 +197,7 @@ def get_forward_returns(date, price_series, periods):
             returns[label] = np.nan
     return returns
 
-def analyze_episodes(grai_series, price_series, threshold=2.0):
+def analyze_episodes(grai_series: pd.Series, price_series: pd.Series, threshold: float = 2.0) -> pd.DataFrame:
     """
     이벤트 기반 분석:
     1. 진입 (Entry): 기준선 돌파
@@ -212,12 +207,12 @@ def analyze_episodes(grai_series, price_series, threshold=2.0):
     periods = {'1W': 5, '1M': 21, '3M': 63, '6M': 126, '12M': 252}
     events = []
     
-    # --- Panic Analysis (Below -2.0) ---
+    # --- Panic Analysis (Below -threshold) ---
     in_panic = False
     panic_start_date = None
     panic_records = [] # (date, value) 저장용
     
-    # --- Euphoria Analysis (Above +2.0) ---
+    # --- Euphoria Analysis (Above +threshold) ---
     in_euphoria = False
     euphoria_start_date = None
     euphoria_records = []
@@ -272,6 +267,7 @@ def analyze_episodes(grai_series, price_series, threshold=2.0):
                 euphoria_start_date = date
                 euphoria_records = [(date, val)]
                 
+                # 진입 시점 기록
                 row = {'Date': date, 'Type': 'Entry', 'Signal': 'Euphoria (Sell)', 'GRAI_Value': val}
                 row.update(get_forward_returns(date, price_series, periods))
                 events.append(row)
@@ -299,39 +295,112 @@ def analyze_episodes(grai_series, price_series, threshold=2.0):
                     
     return pd.DataFrame(events)
 
-# --- 실행 부분 ---
-if '^GSPC' in raw_data.columns:
-    print("\n이벤트 기반 수익률 분석 중...")
-    sp500 = raw_data['^GSPC']
+# ==============================================================================
+# 4. 메인 실행 함수 (Main Execution)
+# ==============================================================================
+def main():
+    print(f"총 {len(UNIQUE_TICKERS)}개의 자산으로 인덱스를 구성합니다.")
     
-    # 분석 수행
-    results_df = analyze_episodes(cs_grai_smooth, sp500, threshold=2.0)
+    # 1. 실행 (데이터 수집)
+    raw_data = fetch_data(UNIQUE_TICKERS, start_date="2010-01-01")
+
+    if raw_data.empty:
+        print("데이터 다운로드에 실패했습니다.")
+        return
+
+    # 2. 계산
+    cs_grai_raw = calculate_cs_grai(raw_data)
+
+    # 3. 정규화 (Z-Score)
+    rolling_window = 252 * 3
+    grai_mean = cs_grai_raw.rolling(window=rolling_window, min_periods=252).mean()
+    grai_std = cs_grai_raw.rolling(window=rolling_window, min_periods=252).std()
     
-    if not results_df.empty:
-        # 날짜순 정렬
-        results_df = results_df.sort_values(by='Date')
+    cs_grai_z = (cs_grai_raw - grai_mean) / grai_std
+    cs_grai_smooth = cs_grai_z.rolling(window=5).mean() # 스무딩
+
+    # 4. 그리기
+    fig, ax1 = plt.subplots(figsize=(15, 8))
+    plt.style.use('bmh')
+
+    # 메인 차트
+    line1 = ax1.plot(cs_grai_smooth.index, cs_grai_smooth, label='Global Risk Appetite (Proxy)', color='#1f77b4', linewidth=1.5)
+    
+    # 기준선
+    ax1.axhline(y=THRESHOLD, color='r', linestyle='--', alpha=0.6)
+    ax1.axhline(y=-THRESHOLD, color='g', linestyle='--', alpha=0.6)
+    ax1.axhline(y=0, color='black', linewidth=1, alpha=0.5)
+    
+    ax1.fill_between(cs_grai_smooth.index, THRESHOLD, cs_grai_smooth, where=(cs_grai_smooth >= THRESHOLD), facecolor='red', alpha=0.3)
+    ax1.fill_between(cs_grai_smooth.index, -THRESHOLD, cs_grai_smooth, where=(cs_grai_smooth <= -THRESHOLD), facecolor='green', alpha=0.3)
+
+    # 현재값 표시
+    if not cs_grai_smooth.empty and not np.isnan(cs_grai_smooth.iloc[-1]):
+        last_date = cs_grai_smooth.index[-1]
+        last_val = cs_grai_smooth.iloc[-1]
+        ax1.plot(last_date, last_val, marker='o', color='red', markersize=8)
+        ax1.annotate(f'{last_val:.2f}', xy=(last_date, last_val), xytext=(10, 5), 
+                     textcoords='offset points', color='red', fontweight='bold', fontsize=12)
+
+    ax1.set_ylabel('Risk Appetite (Z-Score)', fontsize=12, color='#1f77b4')
+    ax1.set_title('Credit Suisse Global Risk Appetite Index (CS GRAI)', fontsize=18, fontweight='bold', pad=20)
+    ax1.grid(True, alpha=0.3)
+
+    # 보조 차트 (S&P 500)
+    if '^GSPC' in raw_data.columns:
+        ax2 = ax1.twinx()
+        sp500 = raw_data['^GSPC'].loc[cs_grai_smooth.index[0]:]
+        line2 = ax2.plot(sp500.index, sp500, color='gray', alpha=0.4, linewidth=1, label='S&P 500')
+        ax2.set_ylabel('S&P 500 Level', color='gray')
+        ax2.grid(False)
         
-        # 컬럼 순서 재정렬 (보기 좋게)
-        cols_order = ['Date', 'Signal', 'Type', 'GRAI_Value', '1W', '1M', '3M', '6M', '12M']
-        results_df = results_df[cols_order]
+        # 범례 통합
+        lines = line1 + line2
+        labels = [l.get_label() for l in lines]
+        ax1.legend(lines, labels, loc='upper left', frameon=True, facecolor='white', framealpha=0.9)
+
+    plt.tight_layout()
+    plt.show()
+
+    # 결과 텍스트
+    print(f"\n현재 CS GRAI 지수: {cs_grai_smooth.iloc[-1]:.2f}")
+
+    # 5. 이벤트 분석 실행
+    if '^GSPC' in raw_data.columns:
+        print("\n이벤트 기반 수익률 분석 중...")
+        sp500 = raw_data['^GSPC']
         
-        # CSV 저장
-        filename = f"GRAI_Event_Analysis_{datetime.now().strftime('%Y%m%d')}.csv"
-        results_df.to_csv(filename, index=False)
+        # 분석 수행
+        results_df = analyze_episodes(cs_grai_smooth, sp500, threshold=THRESHOLD)
         
-        # 결과 출력 포맷팅
-        print_df = results_df.copy()
-        time_cols = ['1W', '1M', '3M', '6M', '12M']
-        for col in time_cols:
-            print_df[col] = print_df[col].apply(lambda x: f"{x*100:6.2f}%" if pd.notnull(x) else "-")
+        if not results_df.empty:
+            # 날짜순 정렬
+            results_df = results_df.sort_values(by='Date')
             
-        print(f"\n[분석 완료] 총 {len(results_df)}개의 시그널 포인트 발견")
-        print(f"결과 파일 저장됨: {filename}")
-        
-        print("\n=== 최근 10개 주요 시점 분석 결과 ===")
-        print(print_df.tail(10).to_string(index=False))
-        
+            # 컬럼 순서 재정렬 (보기 좋게)
+            cols_order = ['Date', 'Signal', 'Type', 'GRAI_Value', '1W', '1M', '3M', '6M', '12M']
+            results_df = results_df[cols_order]
+            
+            # CSV 저장
+            filename = f"GRAI_Event_Analysis_{datetime.now().strftime('%Y%m%d')}.csv"
+            results_df.to_csv(filename, index=False)
+            
+            # 결과 출력 포맷팅
+            print_df = results_df.copy()
+            time_cols = ['1W', '1M', '3M', '6M', '12M']
+            for col in time_cols:
+                print_df[col] = print_df[col].apply(lambda x: f"{x*100:6.2f}%" if pd.notnull(x) else "-")
+                
+            print(f"\n[분석 완료] 총 {len(results_df)}개의 시그널 포인트 발견")
+            print(f"결과 파일 저장됨: {filename}")
+            
+            print("\n=== 최근 10개 주요 시점 분석 결과 ===")
+            print(print_df.tail(10).to_string(index=False))
+            
+        else:
+            print("지정된 기간 내에 기준선을 넘는 이벤트가 발생하지 않았습니다.")
     else:
-        print("지정된 기간 내에 기준선을 넘는 이벤트가 발생하지 않았습니다.")
-else:
-    print("S&P 500 데이터가 없어 수익률 분석이 불가능합니다.")
+        print("S&P 500 데이터가 없어 수익률 분석이 불가능합니다.")
+
+if __name__ == "__main__":
+    main()
