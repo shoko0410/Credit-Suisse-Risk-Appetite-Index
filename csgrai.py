@@ -154,7 +154,7 @@ if not raw_data.empty:
                      textcoords='offset points', color='red', fontweight='bold', fontsize=12)
 
     ax1.set_ylabel('Risk Appetite (Z-Score)', fontsize=12, color='#1f77b4')
-    ax1.set_title('Credit Suisse Risk Appetite Index', fontsize=18, fontweight='bold', pad=20)
+    ax1.set_title('Credit Suisse Global Risk Appetite Index (CS GRAI)', fontsize=18, fontweight='bold', pad=20)
     ax1.grid(True, alpha=0.3)
 
     # 보조 차트 (S&P 500)
@@ -174,7 +174,7 @@ if not raw_data.empty:
     plt.show()
 
     # 결과 텍스트
-    print(f"\n현재 Risk Appetite 지수: {cs_grai_smooth.iloc[-1]:.2f}")
+    print(f"\n현재 CS GRAI 지수: {cs_grai_smooth.iloc[-1]:.2f}")
 
 else:
     print("데이터 다운로드에 실패했습니다.")

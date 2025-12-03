@@ -1,6 +1,6 @@
-# Credit Suisse Risk Appetite Index (CS GRAI) Calculator
+# Credit Suisse Global Risk Appetite Index (CS GRAI) Calculator
 
-This project calculates and visualizes the **Credit Suisse Risk Appetite Index (CS GRAI)**, analyzing market Panic and Euphoria phases based on historical data.
+This project calculates and visualizes the **Credit Suisse Global Risk Appetite Index (CS GRAI)**, analyzing market Panic and Euphoria phases based on historical data.
 
 ## 📋 Features
 
@@ -55,7 +55,7 @@ pip install -r requirements.txt
 Run the command below in your terminal to proceed with data download, index calculation, visualization, and analysis sequentially.
 
 ```bash
-python csrai.py
+python csgrai.py
 ```
 
 ### Execution Process
