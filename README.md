@@ -1,49 +1,75 @@
 # Credit Suisse Risk Appetite Index (CS GRAI) Calculator
 
-이 프로젝트는 **Credit Suisse Risk Appetite Index (CS GRAI)**를 계산하고 시각화하며, 과거 데이터를 기반으로 시장의 패닉(Panic) 및 과열(Euphoria) 구간을 분석하는 도구입니다.
+This project calculates and visualizes the **Credit Suisse Risk Appetite Index (CS GRAI)**, analyzing market Panic and Euphoria phases based on historical data.
 
-## 📋 기능 (Features)
+## 📋 Features
 
-- **데이터 수집**: `yfinance`를 사용하여 전 세계 주식, 채권, 원자재 등 다양한 자산군의 데이터를 자동으로 수집합니다.
-- **GRAI 계산**: 자산들의 Risk(변동성)와 Return(수익률) 간의 회귀분석을 통해 Risk Appetite Index를 산출합니다.
-- **시각화**: 계산된 지수를 Z-Score로 정규화하여 시각적으로 표현하고, 기준선(±2.0)을 통해 시장 상태를 직관적으로 보여줍니다.
-- **이벤트 백테스팅**: 패닉(Panic) 및 과열(Euphoria) 구간을 식별하고, 해당 시점 이후의 수익률(1주, 1개월, 3개월 등)을 분석하여 CSV로 저장합니다.
+- **Data Collection**: Automatically collects data for various asset classes including global equities, bonds, and commodities using `yfinance`.
+- **GRAI Calculation**: Calculates the Risk Appetite Index through regression analysis between Risk (Volatility) and Return of assets.
+- **Visualization**: Visualizes the calculated index by normalizing it as a Z-Score and intuitively shows market conditions through reference lines (±2.0).
+- **Event Backtesting**: Identifies Panic and Euphoria phases and analyzes returns (1 week, 1 month, 3 months, etc.) following these events, saving the results as a CSV file.
 
-## 🛠️ 설치 방법 (Installation)
+## 🌍 Asset Universe
 
-이 프로젝트를 실행하기 위해서는 Python 3.x가 필요합니다. 아래 명령어를 통해 필요한 라이브러리를 설치하세요.
+The index is constructed using the following assets:
+
+### Developed Market Equities
+- **US**: SPY (S&P 500), QQQ (Nasdaq 100), IWM (Russell 2000)
+- **Europe & Others**: EWJ (Japan), EWG (Germany), EWU (UK), EWQ (France), EWL (Switzerland), EWC (Canada), EWA (Australia), EWD (Sweden), EWH (Hong Kong), EWS (Singapore)
+
+### Developed Market Bonds
+- SHY (1-3 Year Treasury), IEF (7-10 Year Treasury), TLT (20+ Year Treasury)
+- BWX (Intl Treasury ex-US), IGOV (Intl Treasury)
+
+### Emerging Market Equities
+- EEM (Emerging Markets), FXI (China Large-Cap), EWY (South Korea), EWT (Taiwan)
+- INDA (India), EWZ (Brazil), EWW (Mexico), EZA (South Africa), TUR (Turkey)
+
+### Emerging Market Bonds
+- EMB (USD Emerging Markets Bond), EMLC (Local Currency Emerging Markets Bond)
+
+### Commodities & REITs
+- **Precious Metals**: GLD (Gold), SLV (Silver)
+- **Energy & Others**: USO (Oil), CPER (Copper), DBC (Commodity Index)
+- **Real Estate**: VNQ (US REITs)
+
+*(Benchmark: ^GSPC - S&P 500)*
+
+## 🛠️ Installation
+
+Python 3.x is required to run this project. Install the necessary libraries using the command below:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 필수 라이브러리
-- `yfinance`: 금융 데이터 다운로드
-- `pandas`: 데이터 처리 및 분석
-- `numpy`: 수치 계산
-- `scikit-learn`: 선형 회귀 분석
-- `matplotlib`: 차트 시각화
+### Required Libraries
+- `yfinance`: Financial data download
+- `pandas`: Data processing and analysis
+- `numpy`: Numerical calculations
+- `scikit-learn`: Linear regression analysis
+- `matplotlib`: Chart visualization
 
-## 🚀 사용 방법 (Usage)
+## 🚀 Usage
 
-터미널에서 아래 명령어를 실행하면 데이터 다운로드, 지수 계산, 시각화 및 분석이 순차적으로 진행됩니다.
+Run the command below in your terminal to proceed with data download, index calculation, visualization, and analysis sequentially.
 
 ```bash
 python csrai.py
 ```
 
-### 실행 과정
-1. **데이터 다운로드**: 설정된 자산 유니버스(선진국/신흥국 주식 및 채권, 원자재 등)의 데이터를 가져옵니다.
-2. **지수 산출**: 매일의 Risk-Return 관계를 분석하여 GRAI를 계산합니다.
-3. **차트 출력**: CS GRAI 지수와 S&P 500 지수를 함께 시각화한 그래프가 팝업됩니다.
-4. **결과 분석**: 이벤트(Panic/Euphoria) 발생 시점과 이후 수익률을 분석하여 콘솔에 출력하고, `GRAI_Event_Analysis_YYYYMMDD.csv` 파일로 저장합니다.
+### Execution Process
+1. **Data Download**: Fetches data for the defined asset universe (Developed/Emerging market equities & bonds, commodities, etc.).
+2. **Index Calculation**: Calculates GRAI by analyzing the daily Risk-Return relationship.
+3. **Chart Output**: A graph visualizing the CS GRAI index and S&P 500 index will pop up.
+4. **Result Analysis**: Analyzes the timing of events (Panic/Euphoria) and subsequent returns, printing them to the console and saving them as `GRAI_Event_Analysis_YYYYMMDD.csv`.
 
-## 📊 결과물 (Output)
+## 📊 Output
 
-- **차트**: Risk Appetite의 변화 추이와 시장 국면(Panic/Euphoria)을 보여주는 그래프.
-- **CSV 파일**: 이벤트 발생 시점별 상세 분석 데이터.
+- **Chart**: A graph showing the trend of Risk Appetite and market phases (Panic/Euphoria).
+- **CSV File**: Detailed analysis data for each event occurrence.
 
-## ⚠️ 주의사항
+## ⚠️ Notes
 
-- 초기 실행 시 데이터 다운로드에 시간이 소요될 수 있습니다.
-- `yfinance`의 데이터 수신 상태에 따라 일부 티커의 데이터가 누락될 수 있습니다.
+- Initial execution may take some time for data download.
+- Depending on the status of `yfinance`, data for some tickers may be missing.
