@@ -1,17 +1,19 @@
 # Credit Suisse Global Risk Appetite Index (CS GRAI) Calculator
 
-This project calculates and visualizes the **Credit Suisse Global Risk Appetite Index (CS GRAI)**, analyzing market Panic and Euphoria phases based on historical data.
+This project calculates and visualizes a **Robust, Institutional-Grade Credit Suisse Global Risk Appetite Index (CS GRAI)**. It analyzes market Panic and Euphoria phases based on historical data, incorporating advanced quantitative methodologies to ensure accuracy and stability.
 
-## 📋 Features
+## 🚀 Key Features (Refactored)
 
-- **Data Collection**: Automatically collects data for various asset classes including global equities, bonds, and commodities using `yfinance`.
-- **GRAI Calculation**: Calculates the Risk Appetite Index through regression analysis between Risk (Volatility) and Return of assets.
-- **Visualization**: Visualizes the calculated index by normalizing it as a Z-Score and intuitively shows market conditions through reference lines (±2.0).
-- **Event Backtesting**: Identifies Panic and Euphoria phases and analyzes returns (1 week, 1 month, 3 months, etc.) following these events, saving the results as a CSV file.
+- **Excess Return Calculation**: Incorporates the Risk-Free Rate (`^IRX`) to measure *real* risk premiums, crucial for high-interest environments.
+- **Dynamic Universe Selection**: Eliminates **Survivorship Bias** by allowing assets to enter the index dynamically as data becomes available, rather than requiring a full history.
+- **Risk Standardization (Z-Score)**: Fixes **High-Beta Bias**. Standardizes risk and return vectors before regression to ensure high-volatility assets (e.g., Emerging Markets) do not disproportionately distort the index.
+- **Robust Outlier Cleaning**: Automatically filters out unrealistic daily price spikes (>50%) to maintain data integrity.
+- **Optimized Performance**: Replaces `sklearn` with vectorized `numpy` operations for lightning-fast calculation.
+- **Official Methodology**: Aligned with Credit Suisse's official whitepaper specifications (126-day Return / 252-day Volatility windows) to prevent overfitting.
 
 ## 🌍 Asset Universe
 
-The index is constructed using the following assets:
+The index is constructed using a diverse set of global assets:
 
 ### Developed Market Equities
 - **US**: SPY (S&P 500), QQQ (Nasdaq 100), IWM (Russell 2000)
@@ -34,10 +36,11 @@ The index is constructed using the following assets:
 - **Real Estate**: VNQ (US REITs)
 
 *(Benchmark: ^GSPC - S&P 500)*
+*(Risk-Free: ^IRX - 13 Week Treasury Bill)*
 
 ## 🛠️ Installation
 
-Python 3.x is required to run this project. Install the necessary libraries using the command below:
+Python 3.x is required. Install the necessary libraries:
 
 ```bash
 pip install -r requirements.txt
@@ -46,30 +49,34 @@ pip install -r requirements.txt
 ### Required Libraries
 - `yfinance`: Financial data download
 - `pandas`: Data processing and analysis
-- `numpy`: Numerical calculations
-- `scikit-learn`: Linear regression analysis
+- `numpy`: Numerical calculations & Vectorized regression
 - `matplotlib`: Chart visualization
+*(Note: `scikit-learn` is no longer required due to numpy optimization)*
 
 ## 🚀 Usage
 
-Run the command below in your terminal to proceed with data download, index calculation, visualization, and analysis sequentially.
+Run the script to download data, calculate the index, and visualize results:
 
 ```bash
 python csgrai.py
 ```
 
 ### Execution Process
-1. **Data Download**: Fetches data for the defined asset universe (Developed/Emerging market equities & bonds, commodities, etc.).
-2. **Index Calculation**: Calculates GRAI by analyzing the daily Risk-Return relationship.
-3. **Chart Output**: A graph visualizing the CS GRAI index and S&P 500 index will pop up.
-4. **Result Analysis**: Analyzes the timing of events (Panic/Euphoria) and subsequent returns, printing them to the console and saving them as `GRAI_Event_Analysis_YYYYMMDD.csv`.
+1.  **Data Download**: Fetches data for the defined asset universe.
+2.  **Data Cleaning**: Applies outlier filtering (>50% spikes) and dynamic universe adjustments.
+3.  **Index Calculation**:
+    *   Calculates 6-month Excess Returns and 12-month Volatility.
+    *   Standardizes Risk/Return (Z-Score).
+    *   Computes the regression slope (Risk Appetite).
+4.  **Visualization**: Displays the CS GRAI Z-Score chart with Panic/Euphoria zones.
+5.  **Event Analysis**: Identifies market regimes and calculates forward returns, saving results to `GRAI_Event_Analysis_YYYYMMDD.csv`.
 
 ## 📊 Output
 
 - **Chart**: A graph showing the trend of Risk Appetite and market phases (Panic/Euphoria).
 - **CSV File**: Detailed analysis data for each event occurrence.
 
-## ⚠️ Notes
+## ⚠️ Methodology Notes
 
-- Initial execution may take some time for data download.
-- Depending on the status of `yfinance`, data for some tickers may be missing.
+- **Time Windows**: Uses 126-day (6-month) return and 252-day (12-month) volatility windows for long-term robustness.
+- **Thresholds**: ±2.0 Z-Score indicates extreme Panic (Buy signal) or Euphoria (Sell signal).
