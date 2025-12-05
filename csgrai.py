@@ -146,26 +146,20 @@ def calculate_cs_grai(price_data: pd.DataFrame) -> pd.Series:
             grai_results[current_date] = np.nan
             continue
             
-        # 회귀분석 (Numpy Optimization)
-        # 수정: 변동성 표준화 (High-Beta Bias 제거)
-        # Risk와 Return을 각각 Z-Score로 정규화하여 회귀분석 수행
-        # 이렇게 하면 기울기(Slope)는 상관계수(Correlation)와 같아짐 (-1 ~ 1 사이 값)
+        # 회귀분석 (Regression Analysis)
+        # 수정: Correlation이 아닌 Slope(Beta)를 계산하도록 변경
+        # CS GRAI는 "Market Price of Risk"를 측정해야 하므로, Risk(X)에 대한 Return(Y)의 기울기를 구함
         
         x = daily_df['Risk'].values
         y = daily_df['Return'].values
         
-        # Z-Score Normalization
-        if np.std(x) == 0 or np.std(y) == 0:
+        if np.std(x) == 0: # Risk가 없으면 기울기 계산 불가
             grai_results[current_date] = 0
             continue
-            
-        x_norm = (x - np.mean(x)) / np.std(x)
-        y_norm = (y - np.mean(y)) / np.std(y)
-        
-        # np.cov는 공분산 행렬을 반환: [[Var(x), Cov(x,y)], [Cov(y,x), Var(y)]]
-        # 정규화된 데이터의 분산은 1이므로, Cov(x_norm, y_norm) 자체가 기울기이자 상관계수임
-        cov_matrix = np.cov(x_norm, y_norm)
-        slope = cov_matrix[0, 1] # / 1.0
+
+        # Linear Regression (Slope = Beta)
+        # deg=1: 1차 회귀분석 (y = ax + b)
+        slope, intercept = np.polyfit(x, y, 1)
         
         grai_results[current_date] = slope
         
@@ -360,7 +354,9 @@ def main():
         ax1.legend(lines, labels, loc='upper left', frameon=True, facecolor='white', framealpha=0.9)
 
     plt.tight_layout()
-    plt.show()
+    # plt.show() # Blocking prevention
+    plt.savefig('csgrai_result.png')
+    print("그래프가 'csgrai_result.png'로 저장되었습니다.")
 
     # 결과 텍스트
     print(f"\n현재 CS GRAI 지수: {cs_grai_smooth.iloc[-1]:.2f}")
