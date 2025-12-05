@@ -4,10 +4,10 @@ This project calculates and visualizes a **Robust, Institutional-Grade Credit Su
 
 ## 🚀 Key Features (Refactored)
 
-- **Excess Return Calculation**: Incorporates the Risk-Free Rate (`^IRX`) to measure *real* risk premiums, crucial for high-interest environments.
-- **Dynamic Universe Selection**: Eliminates **Survivorship Bias** by allowing assets to enter the index dynamically as data becomes available, rather than requiring a full history.
+- **Excess Return per Unit of Risk**: Calculates Excess Return by strictly matching the duration of the Risk-Free Rate (6-month accumulated) with asset returns, ensuring precise "Duration Matching" as per CS Whitepaper.
+- **Dynamic Universe Selection (1990~)**: Eliminates **Survivorship Bias** by allowing assets to enter the index naturally as they get listed (e.g., INDA entering in 2012). The index automatically uses available data for each day.
 - **Market Price of Risk (Beta)**: Calculates the regression slope (Beta) of Return vs. Risk to directly measure the market's price of risk, consistent with the Core CS GRAI methodology.
-- **Risk Standardization (Z-Score)**: Applies Z-Score normalization to the final index to ensure comparable signals across different market regimes.
+- **Risk Standardization (Z-Score)**: Applies Z-Score normalization using an **Expanding Window** (not rolling) to the final index. This prevents **Regime Dilution** by ensuring current market conditions are always compared against the full history of crises and booms.
 - **Robust Outlier Cleaning**: Automatically filters out unrealistic daily price spikes (>50%) to maintain data integrity.
 - **Optimized Performance**: Replaces `sklearn` with vectorized `numpy` operations for lightning-fast calculation.
 - **Official Methodology**: Aligned with Credit Suisse's official whitepaper specifications (126-day Return / 252-day Volatility windows) to prevent overfitting.

@@ -66,7 +66,7 @@ def clean_outliers(df: pd.DataFrame, threshold: float = 0.5) -> pd.DataFrame:
     print("  [Debug] clean_outliers 완료 (이상치 없음)", flush=True)
     return df
 
-def fetch_data(ticker_list: List[str], start_date: str = "2010-01-01") -> pd.DataFrame:
+def fetch_data(ticker_list: List[str], start_date: str = "1990-01-01") -> pd.DataFrame:
     print("데이터 다운로드 시작... (yf.download 호출)", flush=True)
     try:
         # auto_adjust=False 옵션 추가 (Adj Close 확보용)
@@ -123,8 +123,33 @@ def calculate_cs_grai(price_data: pd.DataFrame) -> pd.Series:
     else:
         # ^IRX는 연율(%)로 제공되므로 일간 수익률로 변환 필요 (근사치: 연율/252)
         rf_series = price_data[rf_ticker] / 100 / 252
+        rf_series = rf_series.ffill() # [추가] 금리 데이터가 빈 날은 전날 금리 사용
         
     valid_assets = [t for t in price_data.columns if t != '^GSPC' and t != rf_ticker]
+
+    # [2] Pre-calculate Risk (Volatility)
+    # (Vectorized implementation)
+    print("  [Step 1] Risk Matrix(Volatility) 벡터화 계산 중...", flush=True)
+    # Calculate daily log returns for all assets
+    log_rets_daily = np.log(price_data[valid_assets] / price_data[valid_assets].shift(1))
+    
+    # Rolling Volatility (Annualized)
+    # DataFrame.rolling().std() computes sample standard deviation (N-1) by default, matching the previous logic.
+    risk_matrix = log_rets_daily.rolling(window=VOL_WINDOW).std() * np.sqrt(252)
+    
+    # [3] Pre-calculate Excess Returns & Duration Matching
+    # (Vectorized implementation for speed and accuracy)
+    print("  [Step 2] Excess Return Matrix & Duration Matching 계산 중...", flush=True)
+    
+    # 6-month Returns (Discrete) -> pct_change(126) matches p_current/p_past - 1
+    return_matrix = price_data[valid_assets].pct_change(periods=RET_WINDOW)
+    
+    # Risk-Free Rate Duration Matching (Sum over same window)
+    rf_rolling = rf_series.rolling(window=RET_WINDOW).sum()
+    
+    # Excess Returns: Subtract RF from each asset's return
+    # align axes automatically
+    excess_return_matrix = return_matrix.sub(rf_rolling, axis=0)
     
     start_idx = max(RET_WINDOW, VOL_WINDOW)
     total_days = len(price_data)
@@ -135,23 +160,9 @@ def calculate_cs_grai(price_data: pd.DataFrame) -> pd.Series:
     for i in range(start_idx, total_days):
         current_date = dates[i]
         
-        # 데이터 슬라이싱
-        subset_vol = price_data[valid_assets].iloc[i-VOL_WINDOW : i+1]
-        p_current = price_data[valid_assets].iloc[i]
-        p_past = price_data[valid_assets].iloc[i-RET_WINDOW]
-        
-        # Risk (변동성) 계산
-        log_rets = np.log(subset_vol / subset_vol.shift(1))
-        volatility = log_rets.std() * np.sqrt(252)
-        
-        # Return (초과 수익률) 계산: (수익률 - 무위험수익률)
-        # 기간 수익률 (Simple Return)
-        raw_returns = (p_current / p_past) - 1
-        
-        # 해당 기간 동안의 무위험 수익률 합계 (단리 근사)
-        period_rf = rf_series.iloc[i-RET_WINDOW : i].sum()
-        
-        excess_returns = raw_returns - period_rf
+        # Retrieve pre-calculated values
+        volatility = risk_matrix.iloc[i]
+        excess_returns = excess_return_matrix.iloc[i]
         
         daily_df = pd.DataFrame({'Risk': volatility, 'Return': excess_returns}).dropna()
         
@@ -309,7 +320,8 @@ def main():
     print(f"총 {len(UNIQUE_TICKERS)}개의 자산으로 인덱스를 구성합니다.")
     
     # 1. 실행 (데이터 수집)
-    raw_data = fetch_data(UNIQUE_TICKERS, start_date="2010-01-01")
+    # Dynamic Universe: 1990년부터 데이터를 받아오되, 각 자산별 상장일에 따라 데이터가 없는 기간은 NaN으로 남겨둠
+    raw_data = fetch_data(UNIQUE_TICKERS, start_date="1990-01-01")
 
     if raw_data.empty:
         print("데이터 다운로드에 실패했습니다.")
@@ -319,9 +331,10 @@ def main():
     cs_grai_raw = calculate_cs_grai(raw_data)
 
     # 3. 정규화 (Z-Score)
-    rolling_window = 252 * 3
-    grai_mean = cs_grai_raw.rolling(window=rolling_window, min_periods=252).mean()
-    grai_std = cs_grai_raw.rolling(window=rolling_window, min_periods=252).std()
+    # 수정: Rolling Window가 아닌 Expanding Window 사용 (Regime Dilution 방지)
+    # 과거의 위기/호황 데이터를 잊지 않고 누적하여 현재 수준을 역사적 관점에서 평가함
+    grai_mean = cs_grai_raw.expanding(min_periods=252).mean()
+    grai_std = cs_grai_raw.expanding(min_periods=252).std()
     
     cs_grai_z = (cs_grai_raw - grai_mean) / grai_std
     cs_grai_smooth = cs_grai_z.rolling(window=5).mean() # 스무딩
