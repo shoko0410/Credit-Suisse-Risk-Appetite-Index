@@ -25,8 +25,15 @@ DM_BONDS = ['SHY', 'IEF', 'TLT', 'BWX', 'IGOV']
 EM_EQUITIES = ['EEM', 'FXI', 'EWY', 'EWT', 'INDA', 'EWZ', 'EWW', 'EZA', 'TUR']
 # 신흥국 채권
 EM_BONDS = ['EMB', 'EMLC']
-# 원자재 및 리츠
-COMMODITIES = ['GLD', 'SLV', 'USO', 'CPER', 'DBC', 'VNQ']
+# 원자재 (선물 직접 사용 - 추적오차 및 롤오버 비용 제거)
+COMMODITIES = [
+    'GC=F',   # Gold Futures (금 선물)
+    'SI=F',   # Silver Futures (은 선물)
+    'CL=F',   # WTI Crude Oil Futures (원유 선물)
+    'HG=F',   # Copper Futures (구리 선물)
+    'NG=F',   # Natural Gas Futures (천연가스 선물)
+    'VNQ'     # Vanguard Real Estate ETF (리츠 - 선물 대체재 없음)
+]
 # 벤치마크 (S&P 500)
 BENCHMARK = ['^GSPC']
 
@@ -39,6 +46,7 @@ UNIQUE_TICKERS = list(set(TICKERS))
 # ==============================================================================
 def clean_outliers(df: pd.DataFrame, threshold: float = 0.5) -> pd.DataFrame:
     """일간 수익률이 threshold(50%)를 초과하는 이상치 제거 (Data Cleaning)"""
+    print("  [Debug] clean_outliers 시작", flush=True)
     # 수익률 계산
     returns = df.pct_change()
     
@@ -47,32 +55,35 @@ def clean_outliers(df: pd.DataFrame, threshold: float = 0.5) -> pd.DataFrame:
     outlier_count = mask.sum().sum()
     
     if outlier_count > 0:
-        print(f"데이터 정제: 총 {outlier_count}개의 이상치(>50% 변동)를 감지하여 제거합니다.")
+        print(f"데이터 정제: 총 {outlier_count}개의 이상치(>50% 변동)를 감지하여 제거합니다.", flush=True)
         # 이상치를 NaN으로 처리하고 이전 값으로 채움
         df_clean = df.copy()
         df_clean[mask] = np.nan
         df_clean = df_clean.ffill()
+        print("  [Debug] clean_outliers 완료 (이상치 제거됨)", flush=True)
         return df_clean
     
+    print("  [Debug] clean_outliers 완료 (이상치 없음)", flush=True)
     return df
 
 def fetch_data(ticker_list: List[str], start_date: str = "2010-01-01") -> pd.DataFrame:
-    print("데이터 다운로드 중... (약 1분 정도 소요될 수 있습니다)")
+    print("데이터 다운로드 시작... (yf.download 호출)", flush=True)
     try:
         # auto_adjust=False 옵션 추가 (Adj Close 확보용)
         df = yf.download(ticker_list, start=start_date, progress=False, auto_adjust=False)
+        print("데이터 다운로드 완료 (yf.download 반환)", flush=True)
         
         if 'Adj Close' in df.columns:
             data = df['Adj Close']
         elif 'Close' in df.columns:
-            print("알림: 'Adj Close' 대신 'Close' 데이터를 사용합니다.")
+            print("알림: 'Adj Close' 대신 'Close' 데이터를 사용합니다.", flush=True)
             data = df['Close']
         else:
-            print("오류: 데이터 컬럼을 찾을 수 없습니다.")
+            print("오류: 데이터 컬럼을 찾을 수 없습니다.", flush=True)
             return pd.DataFrame()
             
     except Exception as e:
-        print(f"다운로드 오류: {e}")
+        print(f"다운로드 오류: {e}", flush=True)
         return pd.DataFrame()
 
     if data.empty:
@@ -84,8 +95,10 @@ def fetch_data(ticker_list: List[str], start_date: str = "2010-01-01") -> pd.Dat
     # 2. 데이터 품질 관리
     # 수정: 생존 편향 제거를 위해 dropna(axis=1) 및 dropna(axis=0, how='any') 삭제
     # 모든 자산이 NaN인 날짜만 제거
+    print("  [Debug] 데이터 품질 관리 (dropna/ffill) 시작", flush=True)
     data = data.dropna(axis=0, how='all') 
     data = data.ffill() # 결측치 채우기 (중간 결측 방지)
+    print("  [Debug] 데이터 품질 관리 완료", flush=True)
     
     # 벤치마크(^GSPC)가 있는 날짜부터 시작하도록 조정 (선택사항이나 그래프 매칭 위해 권장)
     if '^GSPC' in data.columns:
@@ -93,7 +106,7 @@ def fetch_data(ticker_list: List[str], start_date: str = "2010-01-01") -> pd.Dat
         if first_valid_idx is not None:
             data = data.loc[first_valid_idx:]
     
-    print(f"데이터 수집 완료: {data.shape[1]}개 자산, {data.shape[0]}일 데이터 (Dynamic Universe 적용)")
+    print(f"데이터 수집 완료: {data.shape[1]}개 자산, {data.shape[0]}일 데이터 (Dynamic Universe 적용)", flush=True)
     return data
 
 # ==============================================================================
@@ -117,7 +130,7 @@ def calculate_cs_grai(price_data: pd.DataFrame) -> pd.Series:
     total_days = len(price_data)
     dates = price_data.index
     
-    print("지수 산출 중... (잠시만 기다려주세요)")
+    print(f"지수 산출 시작... 총 {total_days - start_idx}일 처리 예정")
     
     for i in range(start_idx, total_days):
         current_date = dates[i]
@@ -163,8 +176,8 @@ def calculate_cs_grai(price_data: pd.DataFrame) -> pd.Series:
         
         grai_results[current_date] = slope
         
-        if i % 1000 == 0:
-            print(f"Processing: {current_date.date()} | Assets: {len(daily_df)}")
+        if i % 100 == 0:
+            print(f"Processing: {current_date.date()} | Assets: {len(daily_df)} | Progress: {i}/{total_days}")
 
     return pd.Series(grai_results)
 
