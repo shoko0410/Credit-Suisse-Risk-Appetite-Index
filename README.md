@@ -6,7 +6,8 @@ This project calculates and visualizes a **Robust, Institutional-Grade Credit Su
 
 - **Excess Return Calculation**: Incorporates the Risk-Free Rate (`^IRX`) to measure *real* risk premiums, crucial for high-interest environments.
 - **Dynamic Universe Selection**: Eliminates **Survivorship Bias** by allowing assets to enter the index dynamically as data becomes available, rather than requiring a full history.
-- **Risk Standardization (Z-Score)**: Fixes **High-Beta Bias**. Standardizes risk and return vectors before regression to ensure high-volatility assets (e.g., Emerging Markets) do not disproportionately distort the index.
+- **Market Price of Risk (Beta)**: Calculates the regression slope (Beta) of Return vs. Risk to directly measure the market's price of risk, consistent with the Core CS GRAI methodology.
+- **Risk Standardization (Z-Score)**: Applies Z-Score normalization to the final index to ensure comparable signals across different market regimes.
 - **Robust Outlier Cleaning**: Automatically filters out unrealistic daily price spikes (>50%) to maintain data integrity.
 - **Optimized Performance**: Replaces `sklearn` with vectorized `numpy` operations for lightning-fast calculation.
 - **Official Methodology**: Aligned with Credit Suisse's official whitepaper specifications (126-day Return / 252-day Volatility windows) to prevent overfitting.
@@ -31,8 +32,8 @@ The index is constructed using a diverse set of global assets:
 - EMB (USD Emerging Markets Bond), EMLC (Local Currency Emerging Markets Bond)
 
 ### Commodities & REITs
-- **Precious Metals**: GLD (Gold), SLV (Silver)
-- **Energy & Others**: USO (Oil), CPER (Copper), DBC (Commodity Index)
+- **Precious Metals**: GC=F (Gold Futures), SI=F (Silver Futures)
+- **Energy & Others**: CL=F (WTI Crude Oil), HG=F (Copper), NG=F (Natural Gas)
 - **Real Estate**: VNQ (US REITs)
 
 *(Benchmark: ^GSPC - S&P 500)*
@@ -66,8 +67,8 @@ python csgrai.py
 2.  **Data Cleaning**: Applies outlier filtering (>50% spikes) and dynamic universe adjustments.
 3.  **Index Calculation**:
     *   Calculates 6-month Excess Returns and 12-month Volatility.
-    *   Standardizes Risk/Return (Z-Score).
     *   Computes the regression slope (Risk Appetite).
+    *   Standardizes the Risk Appetite Index (Z-Score).
 4.  **Visualization**: Displays the CS GRAI Z-Score chart with Panic/Euphoria zones.
 5.  **Event Analysis**: Identifies market regimes and calculates forward returns, saving results to `GRAI_Event_Analysis_YYYYMMDD.csv`.
 
