@@ -2,7 +2,7 @@
 
 This project calculates and visualizes a **Credit Suisse Global Risk Appetite Index (CS GRAI)**. It analyzes market Panic and Euphoria phases based on historical data, incorporating advanced quantitative methodologies to ensure accuracy and stability.
 
-## 🚀 Key Features (Refactored)
+## 🚀 Key Features
 
 - **Excess Return per Unit of Risk**: Calculates Excess Return by strictly matching the duration of the Risk-Free Rate (6-month accumulated) with asset returns, ensuring precise "Duration Matching" as per CS Whitepaper.
 - **Dynamic Universe Selection (1990~)**: Eliminates **Survivorship Bias** by allowing assets to enter the index naturally as they get listed (e.g., INDA entering in 2012). The index automatically uses available data for each day.
