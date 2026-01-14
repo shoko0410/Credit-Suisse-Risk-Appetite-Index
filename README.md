@@ -2,6 +2,8 @@
 
 This project calculates and visualizes a **Credit Suisse Global Risk Appetite Index (CS GRAI)**. It analyzes market Panic and Euphoria phases based on historical data, incorporating advanced quantitative methodologies to ensure accuracy and stability.
 
+> **Note**: This version includes a hybrid data approach for Bitcoin, using long-term `BTC-USD` price data but **masking it prior to Jan 10, 2024** (Launch of IBIT ETF). This allows the index to reflect the modern inclusion of crypto assets without introducing historical bias before they were accessible via major ETFs.
+
 ## 🚀 Key Features
 
 - **Excess Return per Unit of Risk**: Calculates Excess Return by strictly matching the duration of the Risk-Free Rate (6-month accumulated) with asset returns, ensuring precise "Duration Matching" as per CS Whitepaper.
@@ -42,6 +44,9 @@ The index is constructed using a diverse set of global assets:
 
 ### Emerging Market ETFs (Strategic Detail)
 - **Specific Risks**: TUR (Turkey), INDA (India), EZA (South Africa), EWW (Mexico)
+46: 
+47: ### Crypto (Digital Assets) - *New*
+48: - **Bitcoin**: BTC-USD (Masked pre-2024 to simulate ETF launch)
 
 *(Benchmark: ^GSPC - S&P 500)*
 *(Risk-Free: ^IRX - 13 Week Treasury Bill)*
