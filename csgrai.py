@@ -6,7 +6,8 @@ from datetime import datetime
 from typing import List, Dict, Optional, Union
 
 # ==============================================================================
-# 0. 설정 및 상수 (Configuration) - "The Kitchen Sink" (Crypto Excluded)
+# 0. 설정 및 상수 (Configuration) - "The Kitchen Sink"
+
 # ==============================================================================
 RET_WINDOW = 126  # 6개월
 VOL_WINDOW = 252  # 12개월
@@ -85,6 +86,11 @@ EM_SPECIFIC = [
     'EZA'   # 남아공 (2003~)
 ]
 
+# [6] Crypto (Digital Assets)
+CRYPTO = [
+    'BTC-USD'  # [비트코인] Bitcoin (Using underlying asset but masked as ETF)
+]
+
 # [6] Benchmarks
 BENCHMARK = ['^GSPC']
 RISK_FREE = ['^IRX']
@@ -95,6 +101,7 @@ TICKERS = (
     SECTORS + 
     MACRO + 
     EM_SPECIFIC + 
+    CRYPTO +
     RISK_FREE
 )
 
@@ -108,7 +115,7 @@ def clean_outliers(df: pd.DataFrame, threshold: float = 0.5) -> pd.DataFrame:
     """일간 수익률이 threshold(50%)를 초과하는 이상치 제거 (Data Cleaning)"""
     print("  [Debug] clean_outliers 시작", flush=True)
     # 수익률 계산
-    returns = df.pct_change()
+    returns = df.pct_change(fill_method=None)
     
     # 1. 일반 자산: 이상치 마스크 생성 (절대값 50% 이상 변동)
     mask = returns.abs() > threshold
@@ -299,8 +306,14 @@ def calculate_cs_grai(price_data: pd.DataFrame) -> pd.Series:
         current_date = dates[i]
         
         # Retrieve pre-calculated values
-        volatility = risk_matrix.iloc[i]
-        excess_returns = excess_return_matrix.iloc[i]
+        volatility = risk_matrix.iloc[i].copy()
+        excess_returns = excess_return_matrix.iloc[i].copy()
+        
+        # [Critical] BTC-USD Masking (ETF Launch Simulation)
+        # IBIT 상장일(2024-01-10) 이전에는 비트코인이 인덱스에 포함되지 않도록 강제 마스킹
+        if 'BTC-USD' in volatility.index and current_date < pd.Timestamp('2024-01-10'):
+             volatility['BTC-USD'] = np.nan
+             excess_returns['BTC-USD'] = np.nan
         
         daily_df = pd.DataFrame({'Risk': volatility, 'Return': excess_returns}).dropna()
         
@@ -544,8 +557,16 @@ def main():
             results_df = results_df[cols_order]
             
             # CSV 저장
+            # CSV 저장
             filename = f"GRAI_Event_Analysis_{datetime.now().strftime('%Y%m%d')}.csv"
-            results_df.to_csv(filename, index=False)
+            try:
+                results_df.to_csv(filename, index=False)
+                print(f"결과 파일 저장됨: {filename}")
+            except PermissionError:
+                # 파일이 열려있어서 저장 실패시, 시간 포함한 새 이름으로 저장
+                new_filename = filename.replace(".csv", f"_{datetime.now().strftime('%H%M%S')}.csv")
+                results_df.to_csv(new_filename, index=False)
+                print(f"[알림] 기존 파일이 열려있어 다른 이름으로 저장되었습니다: {new_filename}")
             
             # 결과 출력 포맷팅
             print_df = results_df.copy()
