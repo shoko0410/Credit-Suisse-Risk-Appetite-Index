@@ -5,9 +5,11 @@ This project calculates and visualizes a **Robust, Institutional-Grade Credit Su
 ## 🚀 Key Features (Refactored)
 
 - **Excess Return per Unit of Risk**: Calculates Excess Return by strictly matching the duration of the Risk-Free Rate (6-month accumulated) with asset returns, ensuring precise "Duration Matching" as per CS Whitepaper.
-- **Dynamic Universe Selection (1990~)**: Eliminates **Survivorship Bias** by allowing assets to enter the index naturally as they get listed (e.g., INDA entering in 2012). The index automatically uses available data for each day.
+- **Institutional-Grade Data (1990~)**: Replaces short-history ETFs with original Global Indices and long-standing Vanguard Mutual Funds (`VUSTX`, `VWEHX`).
+- **Real-Time FX Adjustment**: Automatically fetches currency data (JPY, GBP, EUR, etc.) and converts all local indices (Nikkei 225, FTSE 100) into **USD-denominated returns** for accurate cross-asset comparison.
+- **Dynamic Universe Selection**: Eliminates **Survivorship Bias** by allowing assets to enter the index naturally as they get listed.
 - **Market Price of Risk (Beta)**: Calculates the regression slope (Beta) of Return vs. Risk to directly measure the market's price of risk, consistent with the Core CS GRAI methodology.
-- **Risk Standardization (Z-Score)**: Applies Z-Score normalization using an **Expanding Window** (not rolling) to the final index. This prevents **Regime Dilution** by ensuring current market conditions are always compared against the full history of crises and booms.
+- **Adaptive Normalization (5-Year)**: Uses a **5-Year Rolling Window** for Z-Score normalization to fix **Upward Bias**. By re-centering the index against the recent business cycle, it accurately detects Panic/Euphoria even during prolonged secular bull markets.
 - **Robust Outlier Cleaning**: Automatically filters out unrealistic daily price spikes (>50%) to maintain data integrity.
 - **Optimized Performance**: Replaces `sklearn` with vectorized `numpy` operations for lightning-fast calculation.
 - **Official Methodology**: Aligned with Credit Suisse's official whitepaper specifications (126-day Return / 252-day Volatility windows) to prevent overfitting.
@@ -16,25 +18,30 @@ This project calculates and visualizes a **Robust, Institutional-Grade Credit Su
 
 The index is constructed using a diverse set of global assets:
 
-### Developed Market Equities
-- **US**: SPY (S&P 500), QQQ (Nasdaq 100), IWM (Russell 2000)
-- **Europe & Others**: EWJ (Japan), EWG (Germany), EWU (UK), EWQ (France), EWL (Switzerland), EWC (Canada), EWA (Australia), EWD (Sweden), EWH (Hong Kong), EWS (Singapore)
+### Global Indices (FX Adjusted to USD)
+- **Developed Majors**: ^GSPC, ^IXIC, ^RUT (US), ^N225 (JP), ^GDAXI (DE), ^FTSE (UK), ^FCHI (FR), ^AORD (AU)
+- **Developed Minors**: ^SSMI (Swiss), ^GSPTSE (Canada), ^STI (Singapore), ^OMX (Sweden) - *New*
+- **Emerging**: ^KS11 (Korea), ^TWII (Taiwan), ^BVSP (Brazil), ^HSI (Hong Kong/China)
 
-### Developed Market Bonds
-- SHY (1-3 Year Treasury), IEF (7-10 Year Treasury), TLT (20+ Year Treasury)
-- BWX (Intl Treasury ex-US), IGOV (Intl Treasury)
+### Fixed Income Funds (Vanguard + Global)
+- **Credit Signals**: VWEHX (High Yield - Crisis Indicator), VWESX (Inv Grade)
+- **Rates**: VUSTX (Long-Term), VFISX (Short-Term)
+- **International**: RPIBX (Intl Bond Fund - 1986~) - *New*
+- **EM Debt**: FNMIX (Fidelity EM), PREMX (T. Rowe Price EM)
 
-### Emerging Market Equities
-- EEM (Emerging Markets), FXI (China Large-Cap), EWY (South Korea), EWT (Taiwan)
-- INDA (India), EWZ (Brazil), EWW (Mexico), EZA (South Africa), TUR (Turkey)
+### Sectors (Cyclical) - *New*
+- **Technology**: ^SOX (Semiconductors)
+- **Financials**: XLF (Banking Risk)
+- **Discretionary**: XLY (Consumer Sentiment)
+- **Real Estate**: VGSIX (REITs)
 
-### Emerging Market Bonds
-- EMB (USD Emerging Markets Bond), EMLC (Local Currency Emerging Markets Bond)
+### Commodities & Macro
+- **Precious Metals**: GC=F (Gold), SI=F (Silver)
+- **Cyclical**: CL=F (WTI Oil), HG=F (Copper)
+- **Currencies**: DX-Y.NYB (Dollar Index), AUDUSD=X (Aussie Dollar)
 
-### Commodities & REITs
-- **Precious Metals**: GC=F (Gold Futures), SI=F (Silver Futures)
-- **Energy & Others**: CL=F (WTI Crude Oil), HG=F (Copper), NG=F (Natural Gas)
-- **Real Estate**: VNQ (US REITs)
+### Emerging Market ETFs (Strategic Detail)
+- **Specific Risks**: TUR (Turkey), INDA (India), EZA (South Africa), EWW (Mexico)
 
 *(Benchmark: ^GSPC - S&P 500)*
 *(Risk-Free: ^IRX - 13 Week Treasury Bill)*

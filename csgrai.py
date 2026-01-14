@@ -6,39 +6,99 @@ from datetime import datetime
 from typing import List, Dict, Optional, Union
 
 # ==============================================================================
-# 0. 설정 및 상수 (Configuration & Constants)
+# 0. 설정 및 상수 (Configuration) - "The Kitchen Sink" (Crypto Excluded)
 # ==============================================================================
-RET_WINDOW = 126  # 6개월 (Official CS Whitepaper)
-VOL_WINDOW = 252  # 12개월 (Official CS Whitepaper)
-MIN_ASSETS = 15
-THRESHOLD = 2.0   # 이벤트 분석 임계값
+RET_WINDOW = 126  # 6개월
+VOL_WINDOW = 252  # 12개월
+MIN_ASSETS = 15   
+THRESHOLD = 2.0   
 
-# 자산 유니버스 정의 (Data Universe)
-# 선진국 주식
-DM_EQUITIES = [
-    'SPY', 'QQQ', 'IWM', 'EWJ', 'EWG', 'EWU', 'EWQ', 
-    'EWL', 'EWC', 'EWA', 'EWD', 'EWH', 'EWS'
+# ------------------------------------------------------------------------------
+# 1. 환율 매핑 (FX Mapping) - 전 세계 자산을 달러(USD) 기준으로 통일
+# ------------------------------------------------------------------------------
+FX_MAPPING = {
+    # [선진국]
+    '^N225':  ('JPY=X', 'divide'),    # 일본 (엔화)
+    '^FTSE':  ('GBPUSD=X', 'multiply'), # 영국 (파운드)
+    '^GDAXI': ('EURUSD=X', 'multiply'), # 독일 (유로)
+    '^FCHI':  ('EURUSD=X', 'multiply'), # 프랑스 (유로)
+    '^AORD':  ('AUDUSD=X', 'multiply'), # 호주 (호주달러)
+    '^SSMI':   ('CHF=X', 'divide'),    # 스위스 (프랑)
+    '^GSPTSE': ('CAD=X', 'divide'),    # 캐나다 (달러)
+    '^STI':    ('SGD=X', 'divide'),    # 싱가포르 (달러)
+    '^OMX':    ('SEK=X', 'divide'),    # 스웨덴 (크로나)
+    
+    # [신흥국] 
+    '^HSI':   ('HKD=X', 'divide'),    # 홍콩/중국 (홍콩달러)
+    '^KS11':  ('KRW=X', 'divide'),    # 한국 (원화)
+    '^TWII':  ('TWD=X', 'divide'),    # 대만 (대만달러)
+    '^BVSP':  ('BRL=X', 'divide')     # 브라질 (헤알화)
+}
+
+# ------------------------------------------------------------------------------
+# 2. 자산 유니버스 (Asset Universe) - All-In Strategy
+# ------------------------------------------------------------------------------
+
+# [1] Global Indices (역사적 데이터 확보용 원본 지수)
+MAJOR_INDICES = [
+    '^GSPC', '^IXIC', '^RUT', # 미국 (S&P500, 나스닥, 러셀2000-소형주)
+    '^N225', '^GDAXI', '^FTSE', '^FCHI', '^AORD', # Major DM
+    '^SSMI', '^GSPTSE', '^STI', '^OMX', # Minor DM (스위스, 캐나다, 싱가포르, 스웨덴)
+    '^HSI', '^KS11', '^TWII', '^BVSP' # Major EM
 ]
-# 선진국 채권
-DM_BONDS = ['SHY', 'IEF', 'TLT', 'BWX', 'IGOV']
-# 신흥국 주식
-EM_EQUITIES = ['EEM', 'FXI', 'EWY', 'EWT', 'INDA', 'EWZ', 'EWW', 'EZA', 'TUR']
-# 신흥국 채권
-EM_BONDS = ['EMB', 'EMLC']
-# 원자재 (선물 직접 사용 - 추적오차 및 롤오버 비용 제거)
-COMMODITIES = [
-    'GC=F',   # Gold Futures (금 선물)
-    'SI=F',   # Silver Futures (은 선물)
-    'CL=F',   # WTI Crude Oil Futures (원유 선물)
-    'HG=F',   # Copper Futures (구리 선물)
-    'NG=F',   # Natural Gas Futures (천연가스 선물)
-    'VNQ'     # Vanguard Real Estate ETF (리츠 - 선물 대체재 없음)
+
+# [2] Bond & Credit Funds (채권 & 신용 - 뮤추얼 펀드 사용)
+FIXED_INCOME = [
+    'VUSTX', # [장기국채] Vanguard Long-Term Treasury (1986~)
+    'VFISX', # [단기국채] Vanguard Short-Term Treasury (1991~)
+    'VWESX', # [우량회사채] Vanguard Long-Term Inv Grade (1973~)
+    'VWEHX', # [하이일드] Vanguard High-Yield Corp (1978~) 
+    'RPIBX', # [해외국채] T. Rowe Price Intl Bond (1986~)
+    'FNMIX', # [이머징채권] Fidelity New Markets Income (1993~)
+    'PREMX'  # [이머징채권2] T. Rowe Price EM Bond (1994~)
 ]
-# 벤치마크 (S&P 500)
+
+# [3] Sectors & Real Assets (경기 민감형 자산)
+# 반도체 지수 + 리츠 펀드 + 주요 경기 민감 ETF(금융, 소비재)
+SECTORS = [
+    '^SOX',   # [반도체] 필라델피아 반도체 지수 (1994~)
+    'VGSIX',  # [부동산] Vanguard Real Estate Fund (1996~)
+    'XLF',    # [금융] Financial Select Sector SPDR (1998~)
+    'XLY'     # [소비재] Consumer Discretionary SPDR (1998~)
+]
+
+# [4] Commodities & Currencies (원자재 & 통화)
+MACRO = [
+    'GC=F', 'SI=F', # 금, 은 (인플레 헤지)
+    'CL=F', 'HG=F', # 원유, 구리 (실물 경기)
+    'DX-Y.NYB',     # 달러 인덱스 (안전자산)
+    'AUDUSD=X'      # 호주 달러 (위험자산 통화)
+]
+
+# [5] Emerging Markets ETFs (지수로 커버 안 되는 나머지 국가들)
+# 터키, 인도, 멕시코, 남아공 등 '약한 고리' 감지용
+EM_SPECIFIC = [
+    'EEM',  # 이머징 전체 (2003~)
+    'INDA', # 인도 (2012~)
+    'TUR',  # 터키 (2008~)
+    'EWW',  # 멕시코 (1996~)
+    'EZA'   # 남아공 (2003~)
+]
+
+# [6] Benchmarks
 BENCHMARK = ['^GSPC']
+RISK_FREE = ['^IRX']
 
-RISK_FREE = ['^IRX'] # 13 Week Treasury Bill
-TICKERS = DM_EQUITIES + DM_BONDS + EM_EQUITIES + EM_BONDS + COMMODITIES + BENCHMARK + RISK_FREE
+TICKERS = (
+    MAJOR_INDICES + 
+    FIXED_INCOME + 
+    SECTORS + 
+    MACRO + 
+    EM_SPECIFIC + 
+    RISK_FREE
+)
+
+# 중복 제거
 UNIQUE_TICKERS = list(set(TICKERS))
 
 # ==============================================================================
@@ -66,48 +126,81 @@ def clean_outliers(df: pd.DataFrame, threshold: float = 0.5) -> pd.DataFrame:
     print("  [Debug] clean_outliers 완료 (이상치 없음)", flush=True)
     return df
 
-def fetch_data(ticker_list: List[str], start_date: str = "1990-01-01") -> pd.DataFrame:
-    print("데이터 다운로드 시작... (yf.download 호출)", flush=True)
+def fetch_data(ticker_list: list, start_date: str = "1990-01-01") -> pd.DataFrame:
+    """
+    데이터 다운로드 및 환율 보정 (USD Adjustment) 수행
+    """
+    print("데이터 다운로드 및 통화 보정(USD Adjustment) 시작...", flush=True)
+    
+    # 1. 환율 데이터에 필요한 티커들 추출
+    fx_tickers = set()
+    for idx, (fx, op) in FX_MAPPING.items():
+        if idx in ticker_list:
+            fx_tickers.add(fx)
+    
+    # 2. 전체 데이터 다운로드 (자산 + 환율)
+    all_tickers = list(set(ticker_list) | fx_tickers)
+    
     try:
-        # auto_adjust=False 옵션 추가 (Adj Close 확보용)
-        df = yf.download(ticker_list, start=start_date, progress=False, auto_adjust=False)
-        print("데이터 다운로드 완료 (yf.download 반환)", flush=True)
+        # auto_adjust=False로 원본 가격 확보 (수정주가 사용을 위함)
+        df = yf.download(all_tickers, start=start_date, progress=False, auto_adjust=False)
         
-        if 'Adj Close' in df.columns:
-            data = df['Adj Close']
-        elif 'Close' in df.columns:
-            print("알림: 'Adj Close' 대신 'Close' 데이터를 사용합니다.", flush=True)
-            data = df['Close']
+        # MultiIndex 처리 ('Adj Close' 우선 사용)
+        if isinstance(df.columns, pd.MultiIndex):
+            try:
+                data = df['Adj Close']
+            except KeyError:
+                data = df['Close']
         else:
-            print("오류: 데이터 컬럼을 찾을 수 없습니다.", flush=True)
-            return pd.DataFrame()
+            data = df['Adj Close'] if 'Adj Close' in df.columns else df['Close']
             
     except Exception as e:
-        print(f"다운로드 오류: {e}", flush=True)
+        print(f"다운로드 오류: {e}")
         return pd.DataFrame()
 
     if data.empty:
         return pd.DataFrame()
 
-    # 1. 이상치 제거 (Outlier Cleaning)
-    data = clean_outliers(data)
+    # 3. 환율 보정 (Currency Conversion)
+    adjusted_data = data.copy()
+    print("  [Processing] 현지 통화 자산을 USD로 변환 중...", flush=True)
+    
+    for asset in ticker_list:
+        # FX 매핑이 존재하는 자산인지 확인
+        if asset in FX_MAPPING and asset in data.columns:
+            fx_ticker, operation = FX_MAPPING[asset]
+            
+            if fx_ticker in data.columns:
+                # 환율 데이터 결측치 보정 (휴일 등으로 비는 경우 전일 값 사용)
+                fx_series = data[fx_ticker].ffill()
+                
+                if operation == 'divide':
+                    # 예: Nikkei(JPY) / (JPY/USD) = Nikkei(USD)
+                    adjusted_data[asset] = data[asset] / fx_series
+                    # print(f"    - {asset}: JPY -> USD 변환 (Divide)")
+                elif operation == 'multiply':
+                    # 예: FTSE(GBP) * (USD/GBP) = FTSE(USD)
+                    adjusted_data[asset] = data[asset] * fx_series
+                    # print(f"    - {asset}: Local -> USD 변환 (Multiply)")
+            else:
+                print(f"    [Warning] 환율 데이터({fx_ticker}) 누락으로 {asset} 변환 실패.")
 
-    # 2. 데이터 품질 관리
-    # 수정: 생존 편향 제거를 위해 dropna(axis=1) 및 dropna(axis=0, how='any') 삭제
-    # 모든 자산이 NaN인 날짜만 제거
-    print("  [Debug] 데이터 품질 관리 (dropna/ffill) 시작", flush=True)
-    data = data.dropna(axis=0, how='all') 
-    data = data.ffill() # 결측치 채우기 (중간 결측 방지)
-    print("  [Debug] 데이터 품질 관리 완료", flush=True)
+    # 4. 분석에 필요한 자산만 남기고 환율 티커 제거
+    final_cols = [t for t in ticker_list if t in adjusted_data.columns]
+    final_data = adjusted_data[final_cols]
     
-    # 벤치마크(^GSPC)가 있는 날짜부터 시작하도록 조정 (선택사항이나 그래프 매칭 위해 권장)
-    if '^GSPC' in data.columns:
-        first_valid_idx = data['^GSPC'].first_valid_index()
-        if first_valid_idx is not None:
-            data = data.loc[first_valid_idx:]
+    # 5. 전처리 (이상치 제거 및 결측치 처리)
+    final_data = clean_outliers(final_data)
+    final_data = final_data.dropna(axis=0, how='all').ffill()
     
-    print(f"데이터 수집 완료: {data.shape[1]}개 자산, {data.shape[0]}일 데이터 (Dynamic Universe 적용)", flush=True)
-    return data
+    # S&P500 데이터가 시작되는 시점부터 자름 (너무 먼 과거 NaN 방지)
+    if '^GSPC' in final_data.columns:
+        first_valid = final_data['^GSPC'].first_valid_index()
+        if first_valid:
+            final_data = final_data.loc[first_valid:]
+            
+    print(f"데이터 준비 완료: {final_data.shape[1]}개 자산 (USD 기준 통일)")
+    return final_data
 
 # ==============================================================================
 # 2. CS GRAI 계산 엔진
@@ -331,10 +424,12 @@ def main():
     cs_grai_raw = calculate_cs_grai(raw_data)
 
     # 3. 정규화 (Z-Score)
-    # 수정: Rolling Window가 아닌 Expanding Window 사용 (Regime Dilution 방지)
-    # 과거의 위기/호황 데이터를 잊지 않고 누적하여 현재 수준을 역사적 관점에서 평가함
-    grai_mean = cs_grai_raw.expanding(min_periods=252).mean()
-    grai_std = cs_grai_raw.expanding(min_periods=252).std()
+    # 수정: Adaptive Normalization (5-Year Rolling Window)
+    # Expanding Window의 문제점(Upward Bias)을 해결하기 위해, 최근 5년(경기 사이클)을 기준으로
+    # 0점을 재설정(Re-centering)하여 현재 시장의 과열/침체를 상대적으로 평가함.
+    rolling_window_z = 252 * 5
+    grai_mean = cs_grai_raw.rolling(window=rolling_window_z, min_periods=252).mean()
+    grai_std = cs_grai_raw.rolling(window=rolling_window_z, min_periods=252).std()
     
     cs_grai_z = (cs_grai_raw - grai_mean) / grai_std
     cs_grai_smooth = cs_grai_z.rolling(window=5).mean() # 스무딩
