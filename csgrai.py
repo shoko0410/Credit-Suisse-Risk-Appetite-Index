@@ -110,12 +110,57 @@ def clean_outliers(df: pd.DataFrame, threshold: float = 0.5) -> pd.DataFrame:
     # 수익률 계산
     returns = df.pct_change()
     
-    # 이상치 마스크 생성 (절대값 50% 이상 변동)
+    # 1. 일반 자산: 이상치 마스크 생성 (절대값 50% 이상 변동)
     mask = returns.abs() > threshold
+    
+    # 2. ^IRX (금리) 예외 처리: 수익률(%)이 아닌 절대 변화폭(bp) 기준
+    # 금리가 0.1% -> 0.2% 되면 수익률은 100%지만, 실제 변화는 10bp에 불과함.
+    # 따라서 IRX는 전일 대비 1.0%p (100bp) 이상 급변했을 때만 이상치로 간주
+    if '^IRX' in df.columns:
+        irx_diff = df['^IRX'].diff().abs()
+        irx_mask = irx_diff > 1.0  # 100bp
+        
+        # 기존 mask에서 IRX 부분 덮어쓰기
+        mask['^IRX'] = irx_mask
+
+    # 3. Whitelist 처리 (역사적 사실 보존)
+    # 특정 날짜의 극단적 변동이 실제 사건인 경우 이상치에서 제외
+    whitelist = {
+        'CL=F': ['2020-04-20', '2020-04-21'] # 마이너스 유가 사태
+    }
+    
+    # Whitelist 적용
+    for asset, dates in whitelist.items():
+        if asset in df.columns:
+            for d_str in dates:
+                try:
+                    d = pd.Timestamp(d_str)
+                    if d in mask.index and mask.loc[d, asset]:
+                        mask.loc[d, asset] = False
+                        # 보존 로그 출력
+                        val = df.loc[d, asset]
+                        print(f"  [Whitelisted] Date: {d_str} | Asset: {asset} | Val: {val:.2f} (Historical Event Confirmed)")
+                except Exception as e:
+                    print(f"  [Warning] Whitelist check failed for {asset} on {d_str}: {e}")
+
     outlier_count = mask.sum().sum()
     
     if outlier_count > 0:
-        print(f"데이터 정제: 총 {outlier_count}개의 이상치(>50% 변동)를 감지하여 제거합니다.", flush=True)
+        print(f"데이터 정제: 총 {outlier_count}개의 이상치(일반 >50%, 금리 >100bp)를 감지하여 제거합니다.", flush=True)
+        
+        # 상세 내역 출력
+        stack = mask.stack()
+        outliers_indices = stack[stack].index
+        for date, asset in outliers_indices:
+            if asset == '^IRX':
+                # 금리는 절대 변화폭 출력
+                diff_val = df['^IRX'].diff().loc[date]
+                print(f"  [Outlier Removed] Date: {date.date()} | Asset: {asset} | Diff: {diff_val:+.2f} bp (Price: {df.loc[date, asset]:.2f})")
+            else:
+                # 일반 자산은 수익률 출력
+                ret_val = returns.loc[date, asset]
+                print(f"  [Outlier Removed] Date: {date.date()} | Asset: {asset} | Return: {ret_val*100:.2f}%")
+
         # 이상치를 NaN으로 처리하고 이전 값으로 채움
         df_clean = df.copy()
         df_clean[mask] = np.nan
