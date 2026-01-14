@@ -1,8 +1,8 @@
 # Credit Suisse Global Risk Appetite Index (CS GRAI) Calculator
 
-This project calculates and visualizes a **Robust, Institutional-Grade Credit Suisse Global Risk Appetite Index (CS GRAI)**. It analyzes market Panic and Euphoria phases based on historical data, incorporating advanced quantitative methodologies to ensure accuracy and stability.
+This project calculates and visualizes a **Credit Suisse Global Risk Appetite Index (CS GRAI)**. It analyzes market Panic and Euphoria phases based on historical data, incorporating advanced quantitative methodologies to ensure accuracy and stability.
 
-## 🚀 Key Features (Refactored)
+## 🚀 Key Features
 
 - **Excess Return per Unit of Risk**: Calculates Excess Return by strictly matching the duration of the Risk-Free Rate (6-month accumulated) with asset returns, ensuring precise "Duration Matching" as per CS Whitepaper.
 - **Institutional-Grade Data (1990~)**: Replaces short-history ETFs with original Global Indices and long-standing Vanguard Mutual Funds (`VUSTX`, `VWEHX`).
